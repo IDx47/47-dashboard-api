@@ -1,69 +1,121 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List
+import sqlite3
+import os
 
-app = FastAPI()
+# -------------------------------
+# FASTAPI SETUP
+# -------------------------------
+app = FastAPI(title="MX Bikes Cloud Leaderboard API")
 
-# In-memory storage for simplicity
-track_data: Dict[str, List[Dict]] = {}
+DB_PATH = "lap_times.db"
 
+# -------------------------------
+# DATABASE SETUP
+# -------------------------------
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS laps (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        track TEXT,
+        time REAL,
+        user TEXT,
+        bike TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    conn.commit()
+    conn.close()
 
+init_db()
+
+# -------------------------------
+# MODELS
+# -------------------------------
 class LapEntry(BaseModel):
     player: str
     bike: str
     laptime: float
     session: str
 
-
 class LapPayload(BaseModel):
     track: str
     laps: List[LapEntry]
 
-
+# -------------------------------
+# ROOT TEST
+# -------------------------------
 @app.get("/")
 def root():
-    return {"status": "online", "message": "MX Bikes Dashboard API is running!"}
+    return {"status": "online", "message": "MX Bikes cloud DB ready!"}
 
-
+# -------------------------------
+# POST /api/ingest
+# -------------------------------
 @app.post("/api/ingest")
 def ingest(payload: LapPayload):
-    """Receive lap data from your Discord bot."""
-    track = payload.track.lower()
-    entries = []
+    """Receive lap data from the bot and insert/update into SQLite."""
+    track = payload.track.lower().strip()
+    laps = payload.laps
 
-    # Keep each rider’s best only
-    best_by_player = {}
-    for lap in payload.laps:
-        prev = best_by_player.get(lap.player)
-        if not prev or lap.laptime < prev.laptime:
-            best_by_player[lap.player] = lap
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
 
-    for lap in best_by_player.values():
-        entries.append(lap.dict())
+    for lap in laps:
+        player = lap.player.strip()
+        bike = lap.bike.strip()
+        time = float(lap.laptime)
 
-    track_data[track] = entries
-    return {"status": "ok", "track": track, "stored": len(entries)}
+        # Check if player already has a record for this track
+        c.execute("SELECT time FROM laps WHERE track=? AND user=?", (track, player))
+        row = c.fetchone()
 
+        if row:
+            # Update if faster
+            if time < row[0]:
+                c.execute("UPDATE laps SET time=?, bike=?, timestamp=CURRENT_TIMESTAMP WHERE track=? AND user=?",
+                          (time, bike, track, player))
+        else:
+            # Insert new record
+            c.execute("INSERT INTO laps (track, time, user, bike) VALUES (?, ?, ?, ?)",
+                      (track, time, player, bike))
 
+    conn.commit()
+    conn.close()
+    return {"status": "ok", "track": track, "count": len(laps)}
+
+# -------------------------------
+# GET /leaderboard/{track}
+# -------------------------------
 @app.get("/leaderboard/{track}")
 def leaderboard(track: str):
-    """Return top-10 laps for a given track."""
-    t = track.lower()
-    if t not in track_data:
-        return {"error": f"No data found for track '{track}'"}
-    laps = sorted(track_data[t], key=lambda x: x["laptime"])[:10]
-    for lap in laps:
-        lap["formatted"] = (
-            f"{int(lap['laptime']//60)}'{lap['laptime']%60:06.3f}"
-            if lap["laptime"] >= 60
-            else f"{lap['laptime']:.3f}"
-        )
-    return {"track": track, "entries": laps}
+    """Return top 10 fastest laps for a given track."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT user, bike, time FROM laps WHERE track=? ORDER BY time ASC LIMIT 10", (track.lower(),))
+    rows = c.fetchall()
+    conn.close()
 
-from fastapi.responses import HTMLResponse
+    if not rows:
+        return {"error": f"No laps found for '{track}'"}
 
+    result = []
+    for user, bike, t in rows:
+        formatted = f"{int(t//60)}'{t%60:06.3f}" if t >= 60 else f"{t:.3f}"
+        result.append({"player": user, "bike": bike, "laptime": t, "formatted": formatted})
+
+    return {"track": track, "entries": result}
+
+# -------------------------------
+# OPTIONAL: Serve dashboard HTML
+# -------------------------------
 @app.get("/dashboard", response_class=HTMLResponse)
 def serve_dashboard():
+    if not os.path.exists("index.html"):
+        return "<h1>Dashboard not yet deployed.</h1>"
     with open("index.html", "r", encoding="utf-8") as f:
         return f.read()
-
