@@ -1,5 +1,6 @@
 # main.py — FastAPI cloud API with fuzzy leaderboard lookup + upload-db support (simplified + future-proof)
 from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List
@@ -10,6 +11,15 @@ import os
 # FASTAPI SETUP
 # -------------------------------
 app = FastAPI(title="MX Bikes Cloud Leaderboard API")
+# Allow Netlify frontend to call this API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # you can restrict to your Netlify URL later
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 DB_PATH = "lap_times.db"
 
