@@ -1,19 +1,19 @@
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
-from typing import List
-import uvicorn
+from typing import List, Dict
 
 app = FastAPI()
 
-# Temporary in-memory storage
-lap_cache = []
+# In-memory storage for simplicity
+track_data: Dict[str, List[Dict]] = {}
 
-# Data model your Discord bot will send
+
 class LapEntry(BaseModel):
     player: str
     bike: str
     laptime: float
-    session: str  # e.g. "race1", "race2", "practice"
+    session: str
+
 
 class LapPayload(BaseModel):
     track: str
@@ -22,28 +22,40 @@ class LapPayload(BaseModel):
 
 @app.get("/")
 def root():
-    return {
-        "status": "online",
-        "message": "MX Bikes Dashboard API is running!"
-    }
+    return {"status": "online", "message": "MX Bikes Dashboard API is running!"}
 
 
-@app.post("/submit_laps")
-async def submit_laps(payload: LapPayload):
-    """
-    Your Discord bot will send all parsed lap times as JSON.
-    We store them in lap_cache for now.
-    """
-    lap_cache.clear()
+@app.post("/api/ingest")
+def ingest(payload: LapPayload):
+    """Receive lap data from your Discord bot."""
+    track = payload.track.lower()
+    entries = []
+
+    # Keep each rider’s best only
+    best_by_player = {}
     for lap in payload.laps:
-        lap_cache.append(lap.dict())
+        prev = best_by_player.get(lap.player)
+        if not prev or lap.laptime < prev.laptime:
+            best_by_player[lap.player] = lap
 
-    return {"status": "ok", "received": len(payload.laps)}
+    for lap in best_by_player.values():
+        entries.append(lap.dict())
+
+    track_data[track] = entries
+    return {"status": "ok", "track": track, "stored": len(entries)}
 
 
-@app.get("/laps")
-def get_laps():
-    """
-    Returns the most recently submitted laps.
-    """
-    return lap_cache
+@app.get("/leaderboard/{track}")
+def leaderboard(track: str):
+    """Return top-10 laps for a given track."""
+    t = track.lower()
+    if t not in track_data:
+        return {"error": f"No data found for track '{track}'"}
+    laps = sorted(track_data[t], key=lambda x: x["laptime"])[:10]
+    for lap in laps:
+        lap["formatted"] = (
+            f"{int(lap['laptime']//60)}'{lap['laptime']%60:06.3f}"
+            if lap["laptime"] >= 60
+            else f"{lap['laptime']:.3f}"
+        )
+    return {"track": track, "entries": laps}
