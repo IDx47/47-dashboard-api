@@ -1,9 +1,10 @@
-# main.py — FastAPI version with /api/tracks endpoint
-from fastapi import FastAPI
+# main.py — FastAPI version with /api/tracks and /api/upload-db endpoint
+from fastapi import FastAPI, File, UploadFile, Header, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List
 import sqlite3
+import shutil
 import os
 
 # -------------------------------
@@ -12,6 +13,7 @@ import os
 app = FastAPI(title="MX Bikes Cloud Leaderboard API")
 
 DB_PATH = "lap_times.db"
+API_KEY = "rnd_hOWpfEUMadXvI7YWVibwbwymwCl9"  # Protects upload route
 
 # -------------------------------
 # DATABASE SETUP
@@ -112,7 +114,7 @@ def leaderboard(track: str):
     return {"track": track, "laps": result}
 
 # -------------------------------
-# NEW: GET /api/tracks
+# GET /api/tracks
 # -------------------------------
 @app.get("/api/tracks")
 def api_tracks():
@@ -133,3 +135,18 @@ def serve_dashboard():
         return "<h1>Dashboard not yet deployed.</h1>"
     with open("index.html", "r", encoding="utf-8") as f:
         return f.read()
+
+# -------------------------------
+# TEMPORARY: /api/upload-db
+# -------------------------------
+@app.post("/api/upload-db")
+def upload_db(file: UploadFile = File(...), x_api_key: str = Header(None)):
+    """Allow uploading a new lap_times.db file via API (protected by API key)."""
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+    with open(DB_PATH, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    size = os.path.getsize(DB_PATH)
+    return {"status": "uploaded", "bytes": size}
