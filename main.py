@@ -1,3 +1,4 @@
+# main.py — FastAPI version with /api/tracks endpoint
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -108,7 +109,20 @@ def leaderboard(track: str):
         formatted = f"{int(t//60)}'{t%60:06.3f}" if t >= 60 else f"{t:.3f}"
         result.append({"player": user, "bike": bike, "laptime": t, "formatted": formatted})
 
-    return {"track": track, "entries": result}
+    return {"track": track, "laps": result}
+
+# -------------------------------
+# NEW: GET /api/tracks
+# -------------------------------
+@app.get("/api/tracks")
+def api_tracks():
+    """Return a list of all tracks with recorded laps."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT track FROM laps ORDER BY track ASC")
+    tracks = [r[0] for r in c.fetchall()]
+    conn.close()
+    return tracks
 
 # -------------------------------
 # OPTIONAL: Serve dashboard HTML
@@ -119,35 +133,3 @@ def serve_dashboard():
         return "<h1>Dashboard not yet deployed.</h1>"
     with open("index.html", "r", encoding="utf-8") as f:
         return f.read()
-
-
-from flask import Flask, jsonify
-import sqlite3
-
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "MX Bikes cloud DB ready!"
-
-@app.route('/leaderboard/<track>')
-def leaderboard(track):
-    conn = sqlite3.connect('lap_times.db')
-    c = conn.cursor()
-    c.execute("SELECT player, bike, laptime FROM laps WHERE track=? ORDER BY laptime ASC LIMIT 10", (track.lower(),))
-    rows = c.fetchall()
-    conn.close()
-    if not rows:
-        return jsonify({"error": f"No laps found for '{track}'"})
-    laps = [{"player": r[0], "bike": r[1], "laptime": r[2]} for r in rows]
-    return jsonify({"track": track, "laps": laps})
-
-# 🆕 New endpoint for all track names
-@app.route('/api/tracks')
-def api_tracks():
-    conn = sqlite3.connect('lap_times.db')
-    c = conn.cursor()
-    c.execute("SELECT DISTINCT track FROM laps ORDER BY track ASC")
-    rows = [r[0] for r in c.fetchall()]
-    conn.close()
-    return jsonify(rows)
