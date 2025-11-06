@@ -1,4 +1,4 @@
-# main.py — FastAPI cloud API with fuzzy leaderboard lookup + upload-db support
+# main.py — FastAPI cloud API with fuzzy leaderboard lookup + upload-db support (simplified + future-proof)
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -60,7 +60,7 @@ def root():
 @app.post("/api/ingest")
 def ingest(payload: LapPayload):
     """Receive lap data from the bot and insert/update into SQLite."""
-    track = payload.track.lower().strip()
+    track = payload.track.strip()  # keep exact casing and spacing
     laps = payload.laps
 
     conn = sqlite3.connect(DB_PATH)
@@ -94,7 +94,7 @@ def ingest(payload: LapPayload):
 # -------------------------------
 @app.get("/leaderboard/{track}")
 def leaderboard(track: str):
-    """Return top 10 fastest laps for a given track (fuzzy, case-insensitive)."""
+    """Return top 10 fastest laps for a given track (case-insensitive fuzzy match)."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     like_pattern = f"%{track.lower()}%"
@@ -118,20 +118,20 @@ def leaderboard(track: str):
     return {"track": track, "laps": result}
 
 # -------------------------------
-# NEW: GET /api/tracks
+# SIMPLE + FUTURE-PROOF: GET /api/tracks
 # -------------------------------
 @app.get("/api/tracks")
 def api_tracks():
-    """Return a list of all tracks with recorded laps."""
+    """Return all track names exactly as stored in the database."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT DISTINCT track FROM laps ORDER BY track ASC")
-    tracks = [r[0] for r in c.fetchall()]
+    tracks = [r[0] for r in c.fetchall() if r[0]]
     conn.close()
     return tracks
 
 # -------------------------------
-# NEW: POST /api/upload-db
+# POST /api/upload-db
 # -------------------------------
 @app.post("/api/upload-db")
 async def upload_db(file: UploadFile = File(...)):
