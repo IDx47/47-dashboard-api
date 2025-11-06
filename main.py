@@ -1,5 +1,5 @@
-# main.py — FastAPI cloud API with fuzzy leaderboard lookup
-from fastapi import FastAPI
+# main.py — FastAPI cloud API with fuzzy leaderboard lookup + upload-db support
+from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List
@@ -129,6 +129,17 @@ def api_tracks():
     tracks = [r[0] for r in c.fetchall()]
     conn.close()
     return tracks
+
+# -------------------------------
+# NEW: POST /api/upload-db
+# -------------------------------
+@app.post("/api/upload-db")
+async def upload_db(file: UploadFile = File(...)):
+    """Accept an uploaded lap_times.db and replace the server database."""
+    contents = await file.read()
+    with open(DB_PATH, "wb") as f:
+        f.write(contents)
+    return {"status": "uploaded", "bytes": len(contents)}
 
 # -------------------------------
 # OPTIONAL: Serve dashboard HTML
