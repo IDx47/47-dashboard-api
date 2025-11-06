@@ -1,18 +1,49 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from pydantic import BaseModel
+from typing import List
+import uvicorn
 
 app = FastAPI()
 
+# Temporary in-memory storage
+lap_cache = []
+
+# Data model your Discord bot will send
+class LapEntry(BaseModel):
+    player: str
+    bike: str
+    laptime: float
+    session: str  # e.g. "race1", "race2", "practice"
+
+class LapPayload(BaseModel):
+    track: str
+    laps: List[LapEntry]
+
+
 @app.get("/")
-def home():
+def root():
     return {
         "status": "online",
         "message": "MX Bikes Dashboard API is running!"
     }
 
-@app.get("/tracks")
-def list_tracks():
-    # Placeholder data — we'll replace this with REAL DB data later
-    return [
-        {"track": "tucson", "best": "1'09.971", "rider": "UD"},
-        {"track": "albaida_sm", "best": "1'18.064", "rider": "TLN47"},
-    ]
+
+@app.post("/submit_laps")
+async def submit_laps(payload: LapPayload):
+    """
+    Your Discord bot will send all parsed lap times as JSON.
+    We store them in lap_cache for now.
+    """
+    lap_cache.clear()
+    for lap in payload.laps:
+        lap_cache.append(lap.dict())
+
+    return {"status": "ok", "received": len(payload.laps)}
+
+
+@app.get("/laps")
+def get_laps():
+    """
+    Returns the most recently submitted laps.
+    """
+    return lap_cache
