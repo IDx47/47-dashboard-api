@@ -59,3 +59,11 @@ def leaderboard(track: str):
             else f"{lap['laptime']:.3f}"
         )
     return {"track": track, "entries": laps}
+
+from fastapi.responses import HTMLResponse
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def serve_dashboard():
+    with open("index.html", "r", encoding="utf-8") as f:
+        return f.read()
+
