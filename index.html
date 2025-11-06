@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MX Bikes Leaderboards</title>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: #0f0f0f;
+      color: #e8e8e8;
+      text-align: center;
+      padding: 2rem;
+    }
+    h1 {
+      color: #ff4500;
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+    select, button {
+      font-size: 1rem;
+      padding: 0.4rem 0.6rem;
+      margin: 0.5rem;
+      border-radius: 8px;
+      border: none;
+    }
+    table {
+      width: 100%;
+      max-width: 600px;
+      margin: 1rem auto;
+      border-collapse: collapse;
+    }
+    th, td {
+      border-bottom: 1px solid #333;
+      padding: 0.6rem;
+    }
+    th {
+      background: #1f1f1f;
+    }
+    tr:nth-child(even) {
+      background: #1a1a1a;
+    }
+  </style>
+</head>
+<body>
+  <h1>🏁 MX Bikes Live Leaderboards</h1>
+
+  <label for="track">Select Track:</label>
+  <select id="track">
+    <option value="lonado">LONADO</option>
+    <option value="tucson">TUCSON</option>
+    <option value="albaida">ALBAIDA</option>
+    <option value="genk">GENK</option>
+  </select>
+  <button onclick="loadLeaderboard()">Load</button>
+
+  <table id="board">
+    <thead>
+      <tr><th>Pos</th><th>Player</th><th>Bike</th><th>Lap Time</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    async function loadLeaderboard() {
+      const track = document.getElementById("track").value;
+      const tbody = document.querySelector("#board tbody");
+      tbody.innerHTML = "<tr><td colspan='4'>Loading...</td></tr>";
+      try {
+        const res = await fetch(`/leaderboard/${track}`);
+        const data = await res.json();
+        if (!data.entries) {
+          tbody.innerHTML = `<tr><td colspan='4'>No data found for ${track}</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = "";
+        data.entries.forEach((lap, i) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${i + 1}</td>
+            <td>${lap.player}</td>
+            <td>${lap.bike}</td>
+            <td><strong>${lap.formatted}</strong></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan='4'>Error: ${err}</td></tr>`;
+      }
+    }
+  </script>
+</body>
+</html>
